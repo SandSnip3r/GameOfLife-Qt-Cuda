@@ -10,61 +10,64 @@
 #include <chrono>
 #include <iostream>
 
-int Widget::toIndex(int row, int col) {
+namespace {
+int toIndex(int row, int col, int width, int height) {
   if (row < 0) {
-    row += kHeight;
-  } else if (row >= kHeight) {
-    row -= kHeight;
+    row += height;
+  } else if (row >= height) {
+    row -= height;
   }
   if (col < 0) {
-    col += kWidth;
-  } else if (col >= kWidth) {
-    col -= kWidth;
+    col += width;
+  } else if (col >= width) {
+    col -= width;
   }
-  return row*kWidth + col;
+  return row*width + col;
 }
+} // anonymous namespace
 
 Widget::Widget(QWidget *parent) : QWidget(parent), ui(new Ui::Widget) {
   ui->setupUi(this);
 
   // Window properties
-  setMinimumSize(kWidth,kHeight);
+  setMinimumSize(kGridWidth*kRenderPixelSize,kGridHeight*kRenderPixelSize);
 
   // GPU grid memory
-  cudaMalloc(&dArray1_, kWidth*kHeight*sizeof(bool));
-  cudaMalloc(&dArray2_, kWidth*kHeight*sizeof(bool));
+  cudaMalloc(&dArray1_, kGridWidth*kGridHeight*sizeof(bool));
+  cudaMalloc(&dArray2_, kGridWidth*kGridHeight*sizeof(bool));
 
   // CPU grid memory
-  array1_ = new bool[kWidth*kHeight];
+  array1_ = new bool[kGridWidth*kGridHeight];
 
   // Create a QImage to be used with the QPainter for quick drawing
-  img_ = new QImage(kWidth, kHeight, QImage::Format_ARGB32);
+  img_ = new QImage(kGridWidth*kRenderPixelSize,
+                    kGridHeight*kRenderPixelSize,
+                    QImage::Format_ARGB32);
 
   initializeGame();
 }
 
 void Widget::initializeGame() {
   // Fill array1_ with the initial conditions
-
   // Set all to false
-  std::memset(array1_, 0, kWidth*kHeight);
+  std::memset(array1_, 0, kGridWidth*kGridHeight);
 
   // Set some to true to start something interesting
   // 1,2,3,4,5,6,7,8,9 // Cool flying diagonals
-  for (auto col : { kWidth/4, kWidth/2, 3*kWidth/4 }) {
-    for (int row=0; row<kHeight; ++row) {
-      array1_[toIndex(row,col)] = true;
+  for (auto col : { kGridWidth/4, kGridWidth/2, 3*kGridWidth/4 }) {
+    for (int row=0; row<kGridHeight; ++row) {
+      array1_[toIndex(row, col, kGridWidth, kGridHeight)] = true;
     }
   }
   // 1,2,3,4,5,6,7,8,9 // Cool flying diagonals
-  for (auto row : { kHeight/4, kHeight/2, 3*kHeight/4 }) {
-    for (int col=0; col<kWidth; ++col) {
-      array1_[toIndex(row,col)] = true;
+  for (auto row : { kGridHeight/4, kGridHeight/2, 3*kGridHeight/4 }) {
+    for (int col=0; col<kGridWidth; ++col) {
+      array1_[toIndex(row, col, kGridWidth, kGridHeight)] = true;
     }
   }
 
   // Copy grid to GPU
-  cudaMemcpy(dArray1_, array1_, kWidth*kHeight*sizeof(bool), cudaMemcpyHostToDevice);
+  cudaMemcpy(dArray1_, array1_, kGridWidth*kGridHeight*sizeof(bool), cudaMemcpyHostToDevice);
 
   fillImage();
   update();
@@ -72,16 +75,20 @@ void Widget::initializeGame() {
 
 void Widget::nextIteration() {
   // Copy grid from GPU
-  cudaMemcpy(array1_, dArray1_, kWidth*kHeight*sizeof(bool), cudaMemcpyDeviceToHost);
+  cudaMemcpy(array1_, dArray1_, kGridWidth*kGridHeight*sizeof(bool), cudaMemcpyDeviceToHost);
 
   // Update image data based on array of bools
   fillImage();
 
   // Update grid
-  cudaNextStep(dArray1_, dArray2_, kWidth, kHeight);
+  cudaNextStep(dArray1_, dArray2_, kGridWidth, kGridHeight);
 
   // Roll buffers
   std::swap(dArray1_, dArray2_);
+
+  if (kStepFrameByFrame) {
+    go_ = false;
+  }
 
   update();
 }
@@ -89,19 +96,20 @@ void Widget::nextIteration() {
 void Widget::fillImage() {
   // Always set image based on array1_
   QRgb *data = reinterpret_cast<QRgb*>(img_->bits());
-  for (int row=0; row<kHeight; ++row) {
+  for (int gridRow=0; gridRow<kGridHeight; ++gridRow) {
     // Create a simple gradient from top to bottom
-    const int blueValue = 255 * static_cast<double>(row)/(kHeight+1);
-    for (int col=0; col<kWidth; ++col) {
-      const auto index = toIndex(row,col);
-      if (array1_[index]) {
-        // Create a simple gradient from left to right
-        const int redValue = 255 * static_cast<double>(col)/(kWidth+1);
-        // Cell is alive, color
-        data[index] = qRgb(redValue,255,255-blueValue);
-      } else {
-        // Cell is dead, set color as black
-        data[index] = qRgb(0,0,0);
+    const int blueValue = 255 * static_cast<double>(gridRow)/(kGridHeight+1);
+    for (int gridCol=0; gridCol<kGridWidth; ++gridCol) {
+      const int redValue = 255 * static_cast<double>(gridCol)/(kGridWidth+1);
+      const auto gridIndex = toIndex(gridRow, gridCol, kGridWidth, kGridHeight);
+      const QRgb pixelColor = array1_[gridIndex] ? qRgb(redValue,255,255-blueValue) : qRgb(0,0,0);
+      for (int pixelRow=0; pixelRow<kRenderPixelSize; ++pixelRow) {
+        for (int pixelCol=0; pixelCol<kRenderPixelSize; ++pixelCol) {
+          const int imgRow = gridRow*kRenderPixelSize + pixelRow;
+          const int imgCol = gridCol*kRenderPixelSize + pixelCol;
+          const auto imgIndex = toIndex(imgRow, imgCol, img_->width(), img_->height());
+          data[imgIndex] = pixelColor;
+        }
       }
     }
   }
@@ -115,9 +123,6 @@ void Widget::paintEvent(QPaintEvent *event) {
   painter.drawImage(target, *img_, source);
   if (go_) {
     nextIteration();
-    if (kStepFrameByFrame) {
-      go_ = false;
-    }
   }
 }
 

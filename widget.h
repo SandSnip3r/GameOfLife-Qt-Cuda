@@ -21,7 +21,8 @@ protected:
   virtual void mousePressEvent(QMouseEvent *event) override;
 
 private:
-  static constexpr int kWidth=2048, kHeight=1024;
+  static constexpr int kGridWidth=2049, kGridHeight=1025;
+  static constexpr int kRenderPixelSize=1;
   static constexpr bool kStepFrameByFrame{false};
   Ui::Widget *ui;
   bool *array1_;
@@ -29,7 +30,6 @@ private:
   QImage *img_;
   bool go_{true};
 
-  static int toIndex(int row, int col);
   void fillImage();
   void initializeGame();
   void nextIteration();

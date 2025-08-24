@@ -1,7 +1,5 @@
 #include "test.h"
 
-#include <cuda_runtime.h>
-
 __device__
 int toIndex(int row, int col, int kWidth, int kHeight) {
   if (row < 0) {
@@ -25,7 +23,7 @@ void updateGrid(bool *currGrid, bool *nextGrid, int kWidth, int kHeight) {
   for (int i=idx; i<kHeight*kWidth; i+=stride) {
     const int row = i / kWidth;
     const int col = i % kWidth;
-    
+
     int livingNeighbors = 0;
     bool ne=true, se=true, sw=true, nw=true;
     if (row != 0 || wrap) {
@@ -88,24 +86,24 @@ void updateGrid(bool *currGrid, bool *nextGrid, int kWidth, int kHeight) {
         ++livingNeighbors;
       }
     }
-    
+
     // Now, do something based on neighbor count
     if (currGrid[toIndex(row,col, kWidth, kHeight)]) {
       // Living already
       if (livingNeighbors < 2) {
-        // Any live cell with fewer than two live neighbours dies, as if by underpopulation.
+        // Any live cell with fewer than two live neighbors dies, as if by underpopulation.
         nextGrid[toIndex(row,col, kWidth, kHeight)] = false;
       } else if (livingNeighbors < 4) {
-        // Any live cell with two or three live neighbours lives on to the next generation.
+        // Any live cell with two or three live neighbors lives on to the next generation.
         nextGrid[toIndex(row,col, kWidth, kHeight)] = true;
       } else {
-        // Any live cell with more than three live neighbours dies, as if by overpopulation.
+        // Any live cell with more than three live neighbors dies, as if by overpopulation.
         nextGrid[toIndex(row,col, kWidth, kHeight)] = false;
       }
     } else {
       // Dead
       if (livingNeighbors == 3) {
-        // Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.
+        // Any dead cell with exactly three live neighbors becomes a live cell, as if by reproduction.
         nextGrid[toIndex(row,col, kWidth, kHeight)] = true;
       } else {
         // Stay dead

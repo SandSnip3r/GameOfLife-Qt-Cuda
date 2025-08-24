@@ -26,20 +26,20 @@ int Widget::toIndex(int row, int col) {
 
 Widget::Widget(QWidget *parent) : QWidget(parent), ui(new Ui::Widget) {
   ui->setupUi(this);
-  
+
   // Window properties
   setMinimumSize(kWidth,kHeight);
 
   // GPU grid memory
   cudaMalloc(&dArray1_, kWidth*kHeight*sizeof(bool));
   cudaMalloc(&dArray2_, kWidth*kHeight*sizeof(bool));
-  
+
   // CPU grid memory
   array1_ = new bool[kWidth*kHeight];
 
   // Create a QImage to be used with the QPainter for quick drawing
   img_ = new QImage(kWidth, kHeight, QImage::Format_ARGB32);
-  
+
   initializeGame();
 }
 
@@ -50,11 +50,13 @@ void Widget::initializeGame() {
   std::memset(array1_, 0, kWidth*kHeight);
 
   // Set some to true to start something interesting
+  // 1,2,3,4,5,6,7,8,9 // Cool flying diagonals
   for (auto col : { kWidth/4, kWidth/2, 3*kWidth/4 }) {
     for (int row=0; row<kHeight; ++row) {
       array1_[toIndex(row,col)] = true;
     }
   }
+  // 1,2,3,4,5,6,7,8,9 // Cool flying diagonals
   for (auto row : { kHeight/4, kHeight/2, 3*kHeight/4 }) {
     for (int col=0; col<kWidth; ++col) {
       array1_[toIndex(row,col)] = true;
@@ -80,7 +82,7 @@ void Widget::nextIteration() {
 
   // Roll buffers
   std::swap(dArray1_, dArray2_);
-  
+
   update();
 }
 
@@ -95,7 +97,7 @@ void Widget::fillImage() {
       if (array1_[index]) {
         // Create a simple gradient from left to right
         const int redValue = 255 * static_cast<double>(col)/(kWidth+1);
-        // Cell is alove, color
+        // Cell is alive, color
         data[index] = qRgb(redValue,255,255-blueValue);
       } else {
         // Cell is dead, set color as black
@@ -106,10 +108,23 @@ void Widget::fillImage() {
 }
 
 void Widget::paintEvent(QPaintEvent *event) {
+  (void)event;
   QPainter painter(this);
   QRectF source(0,0,img_->width(), img_->height());
   QRectF target(0,0,img_->width(), img_->height());
   painter.drawImage(target, *img_, source);
+  if (go_) {
+    nextIteration();
+    if (kStepFrameByFrame) {
+      go_ = false;
+    }
+  }
+}
+
+void Widget::mousePressEvent(QMouseEvent *event) {
+  if (event->button() == Qt::LeftButton) {
+    go_ = true;
+  }
   nextIteration();
 }
 

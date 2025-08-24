@@ -5,6 +5,8 @@
 #include <QWidget>
 #include <QMouseEvent>
 
+#include <vector>
+
 QT_BEGIN_NAMESPACE
 namespace Ui { class Widget; }
 QT_END_NAMESPACE
@@ -25,8 +27,13 @@ private:
   static constexpr int kRenderPixelSize=1;
   static constexpr bool kStepFrameByFrame{false};
   Ui::Widget *ui;
-  bool *array1_;
+
+  // CPU grid memory
+  std::vector<char> array1_;
+
+  // GPU grid memory
   bool *dArray1_, *dArray2_;
+
   QImage *img_;
   bool go_{true};
 

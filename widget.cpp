@@ -36,9 +36,6 @@ Widget::Widget(QWidget *parent) : QWidget(parent), ui(new Ui::Widget) {
   cudaMalloc(&dArray1_, kGridWidth*kGridHeight*sizeof(bool));
   cudaMalloc(&dArray2_, kGridWidth*kGridHeight*sizeof(bool));
 
-  // CPU grid memory
-  array1_ = new bool[kGridWidth*kGridHeight];
-
   // Create a QImage to be used with the QPainter for quick drawing
   img_ = new QImage(kGridWidth*kRenderPixelSize,
                     kGridHeight*kRenderPixelSize,
@@ -48,9 +45,8 @@ Widget::Widget(QWidget *parent) : QWidget(parent), ui(new Ui::Widget) {
 }
 
 void Widget::initializeGame() {
-  // Fill array1_ with the initial conditions
-  // Set all to false
-  std::memset(array1_, 0, kGridWidth*kGridHeight);
+  // Fill array1_ with the initial conditions; set all to false.
+  array1_ = std::vector<char>(static_cast<size_t>(kGridWidth*kGridHeight), static_cast<char>(0));
 
   // Set some to true to start something interesting
   // 1,2,3,4,5,6,7,8,9 // Cool flying diagonals
@@ -67,7 +63,7 @@ void Widget::initializeGame() {
   }
 
   // Copy grid to GPU
-  cudaMemcpy(dArray1_, array1_, kGridWidth*kGridHeight*sizeof(bool), cudaMemcpyHostToDevice);
+  cudaMemcpy(dArray1_, array1_.data(), kGridWidth*kGridHeight*sizeof(bool), cudaMemcpyHostToDevice);
 
   fillImage();
   update();
@@ -75,7 +71,7 @@ void Widget::initializeGame() {
 
 void Widget::nextIteration() {
   // Copy grid from GPU
-  cudaMemcpy(array1_, dArray1_, kGridWidth*kGridHeight*sizeof(bool), cudaMemcpyDeviceToHost);
+  cudaMemcpy(array1_.data(), dArray1_, kGridWidth*kGridHeight*sizeof(bool), cudaMemcpyDeviceToHost);
 
   // Update image data based on array of bools
   fillImage();
@@ -135,7 +131,6 @@ void Widget::mousePressEvent(QMouseEvent *event) {
 
 Widget::~Widget() {
   delete ui;
-  delete[] array1_;
   cudaFree(dArray1_);
   cudaFree(dArray2_);
 }
